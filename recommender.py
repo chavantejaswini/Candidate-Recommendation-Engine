@@ -4,13 +4,12 @@ from openai import OpenAI
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
-# ✅ Make sure .env is loaded BEFORE accessing the key
+# ✅ Load environment variable before initializing client
 load_dotenv()
-
-# ✅ Safely load the key from environment
 api_key = os.getenv("OPENAI_API_KEY")
+
 if not api_key:
-    raise ValueError("OPENAI_API_KEY not found. Make sure .env file exists and contains the API key.")
+    raise ValueError("OPENAI_API_KEY not found. Make sure your .env file is configured.")
 
 client = OpenAI(api_key=api_key)
 
@@ -31,10 +30,18 @@ def compute_similarity(job_text, resumes):
         results.append((resume_id, score))
 
     results.sort(key=lambda x: x[1], reverse=True)
-    return results[:10]
+    return results[:10]  # 🔥 Top 10 as per SproutsAI requirement
 
 def generate_summary(job_text, resume_text):
-    prompt = f"""Compare the job description and resume below. Explain why this person is a good fit.
+    prompt = f"""
+You're a hiring assistant. Given a job description and a candidate's resume, write a brief, enthusiastic summary explaining why this person is a strong match for the role.
+
+Be specific about:
+- Relevant technical skills or experiences
+- Impactful projects or roles
+- Alignment with the job's responsibilities
+
+Use 2-3 short paragraphs only. Be concise and persuasive.
 
 Job Description:
 {job_text}
@@ -42,7 +49,8 @@ Job Description:
 Candidate Resume:
 {resume_text[:1500]}
 
-Summary:"""
+Summary:
+"""
 
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
