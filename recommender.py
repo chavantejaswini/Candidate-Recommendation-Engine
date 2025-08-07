@@ -4,10 +4,9 @@ from openai import OpenAI
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
-# ✅ Load environment variable before initializing client
+# ✅ Load API key securely
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
-
 if not api_key:
     raise ValueError("OPENAI_API_KEY not found. Make sure your .env file is configured.")
 
@@ -30,7 +29,7 @@ def compute_similarity(job_text, resumes):
         results.append((resume_id, score))
 
     results.sort(key=lambda x: x[1], reverse=True)
-    return results[:10]  # 🔥 Top 10 as per SproutsAI requirement
+    return results[:10]  # Limit to top 10
 
 def generate_summary(job_text, resume_text):
     prompt = f"""
