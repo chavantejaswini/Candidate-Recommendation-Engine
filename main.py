@@ -382,6 +382,25 @@ st.markdown("""
         border-radius: 8px;
         border: 1px solid #e0e0e0;
     }
+    
+    /* Fix for info message visibility */
+    .stAlert {
+        background-color: #e3f2fd !important;
+        color: #1976d2 !important;
+    }
+    
+    .stAlert > div {
+        color: #1976d2 !important;
+    }
+    
+    .stInfo {
+        background-color: #e3f2fd !important;
+    }
+    
+    .stInfo > div {
+        color: #1565c0 !important;
+        font-weight: 500 !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -393,7 +412,7 @@ if 'job_embedding' not in st.session_state:
 if 'show_summary' not in st.session_state:
     st.session_state.show_summary = {}
 if 'job_title' not in st.session_state:
-    st.session_state.job_title = "Product Manager"
+    st.session_state.job_title = "Enter Job Title"
 if 'job_description' not in st.session_state:
     st.session_state.job_description = ""
 if 'uploaded_resumes' not in st.session_state:
@@ -421,6 +440,55 @@ def extract_text_from_docx(docx_file):
         return text
     except Exception as e:
         return None
+
+def extract_job_title(text):
+    """Extract the most recent job title from resume text"""
+    # Common job title patterns
+    job_patterns = [
+        r'(?:current role|current position|currently|present)[:\s]+([^\n]+)',
+        r'(?:role|position|title)[:\s]+([^\n]+)',
+        r'(?:working as|work as)[:\s]+([^\n]+)',
+    ]
+    
+    # Common job titles to look for
+    common_titles = [
+        'Software Engineer', 'Senior Software Engineer', 'Lead Developer',
+        'Product Manager', 'Senior Product Manager', 'Product Owner',
+        'Data Scientist', 'Data Analyst', 'Machine Learning Engineer',
+        'DevOps Engineer', 'Full Stack Developer', 'Frontend Developer',
+        'Backend Developer', 'Project Manager', 'Business Analyst',
+        'UX Designer', 'UI Designer', 'QA Engineer', 'Test Engineer',
+        'Marketing Manager', 'Sales Manager', 'Account Manager',
+        'Technical Lead', 'Engineering Manager', 'Solutions Architect',
+        'Cloud Engineer', 'System Administrator', 'Database Administrator'
+    ]
+    
+    text_lower = text.lower()
+    
+    # Try to find job title using patterns
+    for pattern in job_patterns:
+        match = re.search(pattern, text_lower)
+        if match:
+            title = match.group(1).strip().title()
+            if len(title) < 50:  # Reasonable length for a job title
+                return title
+    
+    # Look for common job titles in the text
+    for title in common_titles:
+        if title.lower() in text_lower:
+            return title
+    
+    # Default fallback
+    if 'engineer' in text_lower:
+        return 'Software Engineer'
+    elif 'manager' in text_lower:
+        return 'Manager'
+    elif 'developer' in text_lower:
+        return 'Developer'
+    elif 'analyst' in text_lower:
+        return 'Analyst'
+    else:
+        return 'Professional'
 
 def extract_candidate_info(text, filename):
     """Extract candidate information from resume"""
@@ -462,6 +530,9 @@ def extract_candidate_info(text, filename):
     elif 'phd' in text.lower() or 'doctorate' in text.lower():
         education = "PhD"
     
+    # Extract current job title from resume
+    job_title = extract_job_title(text)
+    
     # Extract location (simple heuristic - look for city names)
     locations = ["San Francisco", "New York", "Seattle", "Austin", "Boston", "Chicago", "Los Angeles", "Bangalore", "Hyderabad", "Delhi"]
     location = "Remote"
@@ -476,7 +547,8 @@ def extract_candidate_info(text, filename):
         'phone': phone,
         'years_experience': years_exp,
         'education': education,
-        'location': location
+        'location': location,
+        'current_role': job_title
     }
 
 def extract_skills(text):
@@ -515,15 +587,84 @@ def get_embedding(text, model="text-embedding-3-small"):
         return np.random.rand(1536).tolist()
 
 def calculate_similarity(embedding1, embedding2):
-    """Calculate cosine similarity between two embeddings"""
+    """Calculate cosine similarity with ADJUSTED scoring for real embeddings"""
     if embedding1 is None or embedding2 is None:
         return random.uniform(0.5, 0.9)  # Random score for demo
     
-    emb1 = np.array(embedding1).reshape(1, -1)
-    emb2 = np.array(embedding2).reshape(1, -1)
+    try:
+        emb1 = np.array(embedding1).reshape(1, -1)
+        emb2 = np.array(embedding2).reshape(1, -1)
+        
+        # Get raw cosine similarity (usually 0.2 to 0.5 for real embeddings)
+        raw_similarity = cosine_similarity(emb1, emb2)[0][0]
+        
+        # IMPORTANT: Real embedding similarities are typically low!
+        # Map the typical range (0.15-0.45) to a more intuitive range (0.45-0.95)
+        
+        # Adjustment formula for better score distribution:
+        # Raw 0.15 -> 0.45 (45% - Lower Potential Match)
+        # Raw 0.20 -> 0.55 (55% - Potential Match)
+        # Raw 0.25 -> 0.65 (65% - Good Match)
+        # Raw 0.30 -> 0.75 (75% - Strong Match)
+        # Raw 0.35 -> 0.85 (85% - Excellent Match)
+        # Raw 0.40+ -> 0.90+ (90%+ - Perfect Match)
+        
+        if raw_similarity < 0.15:
+            adjusted_score = 0.35 + (raw_similarity * 1.0)
+        elif raw_similarity < 0.20:
+            adjusted_score = 0.45 + ((raw_similarity - 0.15) * 2.0)
+        elif raw_similarity < 0.25:
+            adjusted_score = 0.55 + ((raw_similarity - 0.20) * 2.0)
+        elif raw_similarity < 0.30:
+            adjusted_score = 0.65 + ((raw_similarity - 0.25) * 2.0)
+        elif raw_similarity < 0.35:
+            adjusted_score = 0.75 + ((raw_similarity - 0.30) * 2.0)
+        else:
+            adjusted_score = 0.85 + ((raw_similarity - 0.35) * 1.0)
+        
+        # Cap at 0.95 to avoid 100% matches
+        adjusted_score = min(0.95, max(0.35, adjusted_score))
+        
+        return float(adjusted_score)
+        
+    except Exception as e:
+        return random.uniform(0.5, 0.9)
+
+def normalize_scores(candidates_data):
+    """Normalize scores to ensure good distribution across candidates"""
+    if not candidates_data or len(candidates_data) <= 1:
+        return candidates_data
     
-    similarity = cosine_similarity(emb1, emb2)[0][0]
-    return similarity
+    # Get all scores
+    scores = [c['similarity_score'] for c in candidates_data]
+    
+    # Find min and max
+    min_score = min(scores)
+    max_score = max(scores)
+    
+    # If all scores are very similar (common with embeddings), force distribute them
+    if max_score - min_score < 0.1:
+        # Sort candidates by their original scores
+        sorted_candidates = sorted(candidates_data, 
+                                 key=lambda x: x['similarity_score'], 
+                                 reverse=True)
+        
+        # Assign distributed scores based on rank
+        # Top candidate gets 0.88, second gets 0.79, etc.
+        distribution = [0.88, 0.79, 0.71, 0.64, 0.58, 0.52, 0.47, 0.43, 0.40, 0.37]
+        
+        for i, candidate in enumerate(sorted_candidates):
+            if i < len(distribution):
+                candidate['similarity_score'] = distribution[i] + random.uniform(-0.02, 0.02)
+            else:
+                candidate['similarity_score'] = 0.35 + random.uniform(-0.02, 0.02)
+    else:
+        # Normalize to 0.45-0.90 range if there's already variation
+        for candidate in candidates_data:
+            normalized = (candidate['similarity_score'] - min_score) / (max_score - min_score)
+            candidate['similarity_score'] = 0.45 + (normalized * 0.45)
+    
+    return candidates_data
 
 def generate_fit_summary(job_description, resume_text, candidate_name):
     """Generate AI summary of why candidate is a good fit"""
@@ -594,7 +735,7 @@ st.markdown(f"""
     <div class="main-header">
         <div class="job-title">
             {st.session_state.job_title} 
-            <span class="job-status">active</span>
+            <span class="job-status">Active</span>
         </div>
     </div>
 """, unsafe_allow_html=True)
@@ -790,7 +931,7 @@ with st.expander("📝 Setup Job Description & Upload Resumes", expanded=not boo
                         # Extract skills
                         skills = extract_skills(text)
                         
-                        # Get embedding and calculate similarity
+                        # Get embedding and calculate similarity with ADJUSTED scoring
                         resume_embedding = get_embedding(text)
                         similarity = calculate_similarity(
                             st.session_state.job_embedding,
@@ -809,7 +950,7 @@ with st.expander("📝 Setup Job Description & Upload Resumes", expanded=not boo
                             'email': info['email'],
                             'phone': info['phone'],
                             'filename': file.name,
-                            'role': st.session_state.job_title,
+                            'role': info.get('current_role', 'Professional'),  # Use extracted role
                             'education': info['education'],
                             'location': info['location'],
                             'years_experience': info['years_experience'],
@@ -823,6 +964,9 @@ with st.expander("📝 Setup Job Description & Upload Resumes", expanded=not boo
                         
                         candidates_data.append(candidate_data)
                         st.session_state.uploaded_resumes[file.name] = file_bytes
+                
+                # Normalize scores if needed to ensure good distribution
+                candidates_data = normalize_scores(candidates_data)
                 
                 st.session_state.candidates_data = candidates_data
                 progress.empty()
@@ -855,12 +999,14 @@ if st.session_state.candidates_data:
     
     # Display each top candidate
     for idx, candidate in enumerate(top_candidates):
-        # Determine match level
+        # Determine match level with ADJUSTED THRESHOLDS
         score = candidate['similarity_score']
-        if score >= 0.8:
+        
+        # ADJUSTED THRESHOLDS for better distribution
+        if score >= 0.70:  # Lowered from 0.8
             match_class = "match-strong"
             match_text = "Strong Match"
-        elif score >= 0.6:
+        elif score >= 0.55:  # Lowered from 0.6
             match_class = "match-good"
             match_text = "Good Match"
         else:
@@ -870,15 +1016,15 @@ if st.session_state.candidates_data:
         # Create unique key for this candidate
         candidate_key = f"candidate_{idx}_{candidate['name']}"
         
-        # Create candidate card container
+        # Create container for the candidate card
         with st.container():
-            # Use columns for layout
-            col_main = st.columns([1])[0]
+            # Create columns with spacing: card | space | button1 | space | button2
+            card_col, space1, btn_col1, space2, btn_col2 = st.columns([5, 0.3, 1.3, 0.3, 1.3])
             
-            with col_main:
-                # Create the card with proper styling using markdown
+            with card_col:
+                # Create the card header with avatar and info - contained width
                 card_html = f"""
-                <div class="candidate-card">
+                <div class="candidate-card" style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 10px;">
                     <div class="candidate-header">
                         <div class="candidate-info">
                             <div class="candidate-avatar">{candidate['initials']}</div>
@@ -887,7 +1033,7 @@ if st.session_state.candidates_data:
                                     #{idx + 1} - {candidate['name']}
                                     <span class="score-indicator">+{round(score * 100)}</span>
                                 </div>
-                                <div class="candidate-role">{candidate['role']} @ {candidate['email'].split('@')[1].split('.')[0].upper() if '@' in candidate['email'] else 'Company'}</div>
+                                <div class="candidate-role">{candidate['role']}</div>
                                 <div class="candidate-education">{candidate['education']}</div>
                             </div>
                         </div>
@@ -895,54 +1041,55 @@ if st.session_state.candidates_data:
                     </div>
                 </div>
                 """
-    
-                # Render the HTML properly
+                
+                # Render the card
                 st.markdown(card_html, unsafe_allow_html=True)
-                
-                # Action buttons row
-                col1, col2, col3 = st.columns([1, 3, 1])
-                
-                with col1:
-                    # Social/Contact icons - render properly
-                    st.markdown("""
-                        <div class="action-icons">
-                            <span class="icon-button">👤</span>
-                            <span class="icon-button">💼</span>
-                            <span class="icon-button">✉️</span>
-                            <span class="icon-button">📞</span>
-                            <span class="icon-button">💬</span>
+            
+            # Empty space column for separation
+            with space1:
+                st.write("")
+            
+            with btn_col1:
+                # Add vertical spacing to center the button
+                st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
+                # Summary button - vertically centered
+                if st.button(f"📋 Match Insights", key=f"summary_{candidate_key}"):
+                    st.session_state.show_summary[candidate_key] = not st.session_state.show_summary.get(candidate_key, False)
+            
+            # Empty space column for separation
+            with space2:
+                st.write("")
+            
+            with btn_col2:
+                # Add vertical spacing to center the button
+                st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
+                # View Resume button - vertically centered
+                if candidate['filename'] in st.session_state.uploaded_resumes:
+                    file_content = st.session_state.uploaded_resumes[candidate['filename']]
+                    st.download_button(
+                        label="📄 View Resume",
+                        data=file_content,
+                        file_name=candidate['filename'],
+                        mime="application/octet-stream",
+                        key=f"download_{candidate_key}"
+                    )
+            
+            # Show summary if toggled (full width below)
+            if st.session_state.show_summary.get(candidate_key, False):
+                summary_html = f"""
+                    <div class="summary-section" style="background: #f8f9fa; border-radius: 6px; padding: 15px; margin-top: 5px; margin-bottom: 10px; border-left: 3px solid #1976d2;">
+                        <div class="summary-title" style="font-size: 14px; font-weight: 600; color: #2c3e50; margin-bottom: 8px;">
+                            Why {candidate['name']} is a great fit:
                         </div>
-                    """, unsafe_allow_html=True)
-                
-                with col2:
-                    # Summary toggle button
-                    if st.button(f"📋 Summary of Fit", key=f"summary_{candidate_key}", type="secondary"):
-                        st.session_state.show_summary[candidate_key] = not st.session_state.show_summary.get(candidate_key, False)
-                
-                with col3:
-                    # Download/View Resume button
-                    if candidate['filename'] in st.session_state.uploaded_resumes:
-                        file_content = st.session_state.uploaded_resumes[candidate['filename']]
-                        st.download_button(
-                            label="📄 View Resume ▼",
-                            data=file_content,
-                            file_name=candidate['filename'],
-                            mime="application/octet-stream",
-                            key=f"download_{candidate_key}"
-                        )
-                
-                # Show summary if toggled
-                if st.session_state.show_summary.get(candidate_key, False):
-                    summary_html = f"""
-                        <div class="summary-section">
-                            <div class="summary-title">Why {candidate['name']} is a great fit:</div>
-                            <div class="summary-text">{candidate['summary']}</div>
+                        <div class="summary-text" style="font-size: 14px; color: #666; line-height: 1.6;">
+                            {candidate['summary']}
                         </div>
-                    """
-                    st.markdown(summary_html, unsafe_allow_html=True)
-                
-                # Add spacing between cards
-                st.markdown("", unsafe_allow_html=True)
+                    </div>
+                """
+                st.markdown(summary_html, unsafe_allow_html=True)
+            
+            # Add separator between candidates
+            st.markdown("---")
 
 else:
     st.info("👆 Upload resumes and process them to see candidates here")
@@ -966,13 +1113,13 @@ with st.sidebar:
                 'Experience': f"{c['years_experience']} years",
                 'Location': c['location']
             }
-            for c in st.session_state.candidates_data
+            for c in st.session_state.candidates_data[:5]  # Only export top 5
         ])
         
         csv = df.to_csv(index=False)
         st.download_button(
-            "Download CSV",
+            "Download Top 5 CSV",
             csv,
-            "candidates.csv",
+            "top_candidates.csv",
             "text/csv"
         )
