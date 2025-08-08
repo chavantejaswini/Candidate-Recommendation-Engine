@@ -12,7 +12,8 @@
   <h3>🎯 Smart Candidate Matching Using Advanced AI Embeddings</h3>
   <p><strong>Built for SproutsAI Machine Learning Engineer Internship - Tried replicating Sprouts AI's software</strong></p>
   <p>
-    <a href="https://candidate-recommendation-app.streamlit.app">🔗 Live Demo</a> •
+    <a href="https://candidate-recommendation-app.streamlit.app">🔗 Live App</a> •
+    <a href="https://www.loom.com/share/f11ef26d6594464686a7894107497fdd">🎥 Demo Video</a> •
     <a href="#features">✨ Features</a> •
     <a href="#tech-stack">🛠️ Tech Stack</a> •
     <a href="#installation">📦 Installation</a> •
@@ -25,11 +26,6 @@
 ## 🌟 Overview
 
 An intelligent recruitment assistant that leverages **OpenAI's state-of-the-art embedding models** to match candidates with job requirements. This application goes beyond keyword matching, understanding the semantic meaning of skills and experiences to identify the best talent for your roles.
-
-### 🎥 Demo Video
-[![Demo Video](https://img.youtube.com/vi/DEMO_VIDEO_ID/0.jpg)](https://youtu.be/DEMO_VIDEO_ID)
-
----
 
 ## ✨ Features
 
