@@ -4,7 +4,7 @@ from openai import OpenAI
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
-# ✅ Load API key securely
+# Load API key securely
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
